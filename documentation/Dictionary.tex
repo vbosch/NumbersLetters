@@ -1,0 +1,134 @@
+%
+%  NumGenerator
+%
+%  Created by vbosch on 2011-04-18.
+%  Copyright (c) 2011 McBosch. All rights reserved.
+%
+\documentclass[a4paper,10pt,titlepage]{article}
+
+% Use utf-8 encoding for foreign characters
+\usepackage[utf8]{inputenc}
+
+% Setup for fullpage use
+\usepackage{fullpage}
+\usepackage{titlepic}
+\usepackage{float}
+\usepackage{color}
+
+% Uncomment some of the following if you use the features
+%
+% Running Headers and footers
+%\usepackage{fancyhdr}
+
+% Multipart figures
+%\usepackage{subfigure}
+
+% More symbols
+\usepackage{amsmath}
+%\usepackage{amssymb}
+%\usepackage{latexsym}
+
+% Surround parts of graphics with box
+\usepackage{boxedminipage}
+
+% Package for including code in the document
+\usepackage{listings}
+
+% If you want to generate a toc for each chapter (use with book)
+\usepackage{minitoc}
+
+% This is now the recommended way for checking for PDFLaTeX:
+\usepackage{ifpdf}
+
+%\newif\ifpdf
+%\ifx\pdfoutput\undefined
+%\pdffalse % we are not running PDFLaTeX
+%\else
+%\pdfoutput=1 % we are running PDFLaTeX
+%\pdftrue
+%\fi
+
+\ifpdf
+\usepackage[pdftex]{graphicx}
+\else
+\usepackage{graphicx}
+\fi
+\title{ACV \\ Course Work - Implementation of an AI Component for the Letter Problem}
+\titlepic{\includegraphics[width=250pt]{cover.jpg}}
+\author{Vicente Bosch Campos \dag \\
+\textcolor{blue}{\texttt{viboscam@posgrado.upv.es}}}
+
+\begin{document}
+
+\ifpdf
+\DeclareGraphicsExtensions{.pdf, .jpg, .tif}
+\else
+\DeclareGraphicsExtensions{.eps, .jpg}
+\fi
+
+\maketitle
+
+\tableofcontents
+
+\listoffigures
+
+\newpage
+
+\section{Introduction}
+\subsection{Context}
+
+\par As part of the ACV course project we will implement an AI component in order to obtain the longest valid word that can be obtained from a set of characters. 
+
+\par The rules are as follows:
+\begin{itemize}
+	\item The users select randomly 9 characters from the vowel or consonants groups.
+	\item The target is to obtain the longest valid word from the Spanish language with the given letters:
+	\begin{itemize}
+		\item Letters must only be used once.
+		\item Plurals of words are not valid
+		\item Personal forms of verbs are not valid.
+		\item Feminine forms of words are valid.
+	\end{itemize}
+\end{itemize}
+
+\subsection{Scope}
+
+\par In order to implement this AI component to resolve the number problem we will develop components in order to cover the following user cases:
+
+\begin{itemize}
+	\item Evaluate a solution provided by a user against a target value.
+	\item Obtain a best solution through running the resolver. 
+\end{itemize}
+
+\section{Development}
+\par For our implementation of the sequence number problem we have implemented the algorithm in Ruby (v1.9.2) and the following libraries where used: 
+\begin{description}
+	\item[Awesome Print (0.3.1):] Used to perform pre-formatted human readable print outs of the objects.
+	\item[Timeout:] Standard library object was used in order to enforce the time constraint on the execution of the genetic algorithm.
+\end{description}
+
+\subsection{Program Structure}
+
+\par Next we will detail the main software components and characteristics for the sequence number resolver. The implementation can be divided in the following main software components:
+\begin{description}
+	\item[Dictionary:] Coded in \textit{./lib/dictionary.rb} is the main class for this AI component. The class loads an specific word list of a language and constructs an index of the words. The dictionary class presents the following methods:
+	\begin{itemize}
+		\item initialize - Constructs a new object by loading the words from a word list file
+		\item load\_word\_file - Is called from the initialize method and is the specific method in charge of loading the words into the hash structure. The method calculates the hash key for the specific word and adds the word to the Array of words that correspond to that hash key. 
+		\item longest\_valid\_words - Is the main resolver method, given a set of letters represented as a char array it studies all combinations of letters considering combinations with decreasing usage of the letters given ( first it will consider words that it can build with the 9 letters given, then with all possible combinations considering groups formed by 8 letters etc) once it finds a valid word it finalizes and returns to the caller the set of valid words
+		\item chars\_to\_valid\_words - Returns the valid words that can be composed with a given set of letters
+		\item chars\_contain\_valid\_words? - Returns true if there are valid words that can be composed with a given set of letters otherwise it returns false
+		\item word\_exists? - Is used to evaluate the answers given by the user. Returns true if the word exists in the dictionary otherwise it returns false
+		\item add\_word\_to\_dictionary - Adds a word to the hash dictionary
+		\item line\_to\_word - Converts a line in a file to a word ready for insertion
+		\item array\_to\_index and word\_to\_index - this methods are the key to the fast resolution of this problem. Each word is turned with these methods into a key composed by the letters the word is composed of in ascending order. By using this key finding out if a word is valid of if there are any words that can be composed with a set of letters is trivial and can be resolved in constant time
+		\item save - Allows the dictionary objet to be zipped and saved into a file for future use
+		\item self.load - Restores a dictionary object form a previously saved instance using the save methods. By loading the dictionary with this method the load time for the game server improves significantly as the word list server is not processed each time. 
+	\end{itemize}
+\end{description}	
+		
+\section{Conclusions}
+
+\par We have developed an easy and reusable component for the resolution of the Letters problem. 
+
+\end{document}

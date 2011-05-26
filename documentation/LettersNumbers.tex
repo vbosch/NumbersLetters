@@ -1,0 +1,490 @@
+%
+%  NumGenerator
+%
+%  Created by vbosch on 2011-04-18.
+%  Copyright (c) 2011 McBosch. All rights reserved.
+%
+\documentclass[a4paper,10pt,titlepage]{article}
+
+% Use utf-8 encoding for foreign characters
+\usepackage[utf8]{inputenc}
+
+% Setup for fullpage use
+\usepackage{fullpage}
+\usepackage{titlepic}
+\usepackage{float}
+\usepackage{color}
+\usepackage{url}
+
+% Uncomment some of the following if you use the features
+%
+% Running Headers and footers
+%\usepackage{fancyhdr}
+
+% Multipart figures
+%\usepackage{subfigure}
+
+% More symbols
+\usepackage{amsmath}
+%\usepackage{amssymb}
+%\usepackage{latexsym}
+
+% Surround parts of graphics with box
+\usepackage{boxedminipage}
+
+% Package for including code in the document
+\usepackage{listings}
+
+% If you want to generate a toc for each chapter (use with book)
+\usepackage{minitoc}
+
+% This is now the recommended way for checking for PDFLaTeX:
+\usepackage{ifpdf}
+
+%\newif\ifpdf
+%\ifx\pdfoutput\undefined
+%\pdffalse % we are not running PDFLaTeX
+%\else
+%\pdfoutput=1 % we are running PDFLaTeX
+%\pdftrue
+%\fi
+
+\ifpdf
+\usepackage[pdftex]{graphicx}
+\else
+\usepackage{graphicx}
+\fi
+\title{ACV \\ Course Work - Cifras y Letras Game}
+\titlepic{\includegraphics[width=250pt]{cover.jpg}}
+\author{Vicente Bosch Campos \dag \\
+\textcolor{blue}{\texttt{viboscam@posgrado.upv.es}}}
+
+\begin{document}
+
+\ifpdf
+\DeclareGraphicsExtensions{.pdf, .jpg, .tif}
+\else
+\DeclareGraphicsExtensions{.eps, .jpg}
+\fi
+
+\maketitle
+
+\tableofcontents
+
+\listoffigures
+
+\newpage
+
+\section{Introduction}
+\subsection{Context}
+
+\par For the ACV course project we will perform an implementation of the Cifras y Letras game in the Ruby programming language.
+
+\par Cifras y Letras was originally conceived in as a game show. The game is based on the resolution of two type of logic problems: Numbers and Tests. 
+
+\par The rules for the numbers tests are as follows:
+\begin{itemize}
+	\item The six selected numbers are chosen randomly from: 1,2,3,4,5,6,7,8,9,10,25,50,75 \& 100 taking into account that the probability to choose one of the numbers between 1 and 10 must be double than choosing the rest of the numbers.
+	\item The target number must be chosen randomly from the range 101..999.
+	\item Operations allowed to combine numbers are: sum, subtraction, multiplication and division. ( division can only be applied if it is exact)
+	\item Operations must be performed with the selected numbers or with the numbers obtained by operating on them.
+	\item Results of operations must always be integer and positive.
+	\item If the exact number can not be obtained, the best result will be the one closest to it.
+	\item 45 seconds are given to the players to come up with a valid answer.
+	\item The player with the best answer obtains 10 points.
+\end{itemize}
+
+\par The rules for the Letters tests are as follows:
+\begin{itemize}
+	\item The users select randomly 9 characters from the vowel or consonants groups.
+	\item The target is to obtain the longest valid word from the Spanish language with the given letters:
+	\begin{itemize}
+		\item Letters must only be used once.
+		\item Plurals of words are not valid
+		\item Personal forms of verbs are not valid.
+		\item Feminine forms of words are valid.
+	\end{itemize}
+	\item The player that provides the longest word constructed with the set of letters given is the winner.
+	\item The winner receives as many points as letters had the winning word it provided. 
+	
+\end{itemize}
+
+\par A cifras y Letras game is composed by a set of Letters and Numbers tests as described above. Number of tests and order depends on the game format. Usually ( and in our implementation ) the test set is as follows: Numbers - Letters - Letters - Numbers - Letters - Letters - Numbers - Letters - Letters - Numbers.
+
+\par The winner of the game is the player with the highest score at the end of all tests. 
+
+\subsection{Scope}
+
+\par In order to implement the game we will develop components in order to cover the following user cases:
+
+\begin{itemize}
+	\item Generate problems of the described Numbers and Letters tests.
+	\item Evaluate answers given by the players to the specific tests.
+	\item AI Components in order to resolve and provide the players with better answers in order to increment their knowledge.
+	\item Game component in order to ensure the mechanics and rules described.
+	\item Client and Server components to allow for multiple users to join a game and play together
+ players.
+ 	\item Scores and Score list to record players with highest scores in order to provide recognition for their prowess in the game. 
+\end{itemize}
+
+\section{Development}
+
+\subsection{Design}
+
+\subsubsection{Decisions and Known Issues}
+
+\par Following architecture decisions have been made:
+\begin{itemize}
+	\item Initially all communications where conceived to be performed with remote objects (by using distributed ruby) but due to the fact the communications using this technology are difficult to handle when there are many observers for the same object and the speed (due to serialization and deserialization of objects) of communications we swapped the architecture in order to use message based communication.
+	\item As many games can be launched in parallel handling all communications discerning the different games and players from a single server was too complicated and also if there are any memory leak problems or errors on the games it would impact on all other games. In order to avoid this a game has been designed as an independent software component that is launched as an entirely different process from the game server. In this manner we have:
+	\begin{itemize}
+		\item Simplified communications as there are no routings: players can only connect with games they are connected with and vice versa.
+		\item We have encapsulated the game and hence our architecture can escalate to serve as many games as the machine can hold.
+	\end{itemize}
+	\item As the queue message server is not part of the game server but an independent software component in order to avoid any issues of communication between the game server and the clients in case we have an issue due to abrupt shutdown of the message queue communications from the game server to the client are performed with distributed ruby as those communications are not very frequent and the payload is light. Hence we ensure that the communications with the game server will continue even if disaster strikes the message queue server which adds resilience to the architecture.
+	\item Both AI components are developed to exit and provide a best answer reached within a time constraint. This is performed so that we will always have an answer to provide to the user and hence avoid disruption on the expected functionality.
+	\item The game loop is done with discrete simulation:
+	\begin{itemize}
+		\item The different tests communicate with the game by usage of the observable pattern. When there is a modification that must be communicated to the observers it notifies them. For example time in which the test must be performed is measured by launching a separate process with a timer once the timer finishes the observers get notified.
+		\item The game object and the game client subscribe themselves to a message queue and wait to be called when specific messages arrives to the them regarding changes in the game or solutions to the current test. 
+	\end{itemize}
+	
+\end{itemize}
+
+\subsubsection{Selected libraries}
+
+\par For our implementation of the sequence number problem we have implemented the algorithm in Ruby (v1.9.2) and the following libraries where used: 
+\begin{description}
+	\item[Trollop (1.16.2):] Trollop was used in order to parse and generate validators of the command line options for the  commands created. 
+	\item[Stomp (1.1.8):] The Stomp gem was used to perform fast bidirectional communication from the game client programs to the the remote game. Stomp client is used to connect the process to a running ActiveMQ server.
+	\item[Awesome Print (1.1.8):] The awesome print gem is used in order to present the user with pretty colorful outputs from the application through the console. 
+	\item[ruby-debug19 (0.11.6):] ruby-debug gem was used during the implementation of the software and is required for any feature addition or maintenance of the software components. 
+	\item[rgl (0.4.0):] The rgl gem is used inside the operation graph class to generate a .png image representation of the operation described in the graph.
+	\item[rmagick (2.13.1):] rmagick is used in order to display to the user the operation graphs .png generated by the rgl library. 
+	\item[gnuplot (2.3.6):] gnuplot gem is used by the Genetic Population class to present the user with demographic information of the genetic individuals during its evolution. 
+	\item[DRB:] Distributed ruby standard library module is used in order to publish the stand alone game server process. DRB is used in this case to ensure that the server will keep running even if the ActiveMQ server fails. 
+	\item[Observable:] Standard library module was used in order to produce the call back strategy for the game loop. In our implementation the objects will receive alerts when certain states are reached using a publisher - subscriber pattern as performed in discrete simulation hence avoiding active waits. 
+	\item[Timeout:] Standard library object was used in order to enforce the time constraint on the execution of the genetic algorithm.
+\end{description}
+
+\subsection{Software Installation}
+\subsubsection{Ruby Installation}
+
+\par Ruby is a dynamic, open source programming language with a focus on simplicity and productivity. It has an elegant syntax that is natural to read and easy to write.
+
+\par In order to execute the Cifras y Letras game the ruby virtual machine is required to be downloaded and installed. For this purpose please follow the instructions as described in \url{http://www.ruby-lang.org/en/downloads/}
+
+\par Also a more multi-platform Ruby virtual machine based on the java virtual machine can be downloaded from \url{http://www.jruby.org/}.
+
+\subsubsection{Gems Installation}
+
+\par Once the base Ruby virtual machine installation has been concluded the Ruby environment has provided the gem command that will facilitate the download and installation of the libraries described above (internet access is required).
+
+\par Open a standard OS console and execute the following commands:
+\begin{itemize}
+	\item gem install trollop -v 1.16.2
+	\item gem install stomp -v 1.1.8
+	\item gem install awesome\_print -v 1.1.8
+	\item gem install ruby-debug19 -v 0.11.6
+	\item gem install rgl -v 0.4.0
+	\item gem install rmagick -v 2.13.1
+\end{itemize}
+
+\par Once the above commands are executed the specific library versions will be installed to out machine and automatically accessible from all ruby programs that require them.
+
+\subsubsection{Apache ActiveMQ Installation}
+
+\par Apache ActiveMQ is a popular open source messaging and integration services provider.
+
+\par In our software components we will user ActiveMQ 5.5.0 as a stomp protocol server in order to allow bidirectional communication from the remote game to the game client and vice versa.
+
+\par The base installation package contains the Unix/Linux distribution binary that can be downloaded from \url{http://activemq.apache.org/activemq-550-release.html}.
+
+\par The software is downloaded and unzipped in resources folder. The only additional configuration performed was to add the stomp protocol as a transport service. In order to perform perform the following steps:
+\begin{enumerate}
+	\item Open the file \textit{./resources/apache-activemq-5.5.0/conf/activemq.xml}
+	\item Search for the xml tag transportConnectors at the end of the file.
+	\item Add the following line: \begin{verbatim}<transportConnector name="stomp" uri="stomp://localhost:61613"/> \end{verbatim} so that the end result is as follows:
+\begin{verbatim}
+<transportConnectors>
+     <transportConnector name="openwire" uri="tcp://0.0.0.0:61616"/>
+     <transportConnector name="stomp" uri="stomp://localhost:61613"/>
+</transportConnectors>
+\end{verbatim}. 
+\end{enumerate}
+
+\subsection{Program Structure}
+
+\par Next we will detail the main software components and characteristics for the sequence number resolver. We will not describe the software artifacts that pertain to the AI components as they are already described in the pertinent documentation. The implementation can be divided in the following main software components:
+\begin{description}
+	\item[Application Configuration:] Located in \textit{./lib/application\_configuration.rb} is a singleton class that provides global access to general resources (hence acting as a proxy) while ensuring that access is not duplicated. The class implements the singleton pattern by usage of the standard Singleton Module and holds the word dictionary and top score list. It presents the following public methods:
+	\begin{itemize}
+		\item initialize - Called upon creation of the singleton object loads the word dictionary and top scores list.
+		\item dictionary - Accessor method to the loaded dictionary
+		\item top\_scorer - Accessor method to the loaded top scores list
+		\item save\_application\_status - Saves the current dictionary and top score list to a predetermined file name in the resources folder. 
+	\end{itemize}
+	\item[Application Logger:] Present in \textit{./lib/application\_logger.rb} is a singleton class that extends the standard logger object with some pre configuration. It provides the rest of classes with an easy to use logger that can be configured centrally. 
+	\item[Game:] Coded in \textit{./lib/game.rb}. The game class is the main class where the game mechanics are described, it has been coded to be launched in a stand alone process ( for which the command remote\_game.rb was generated). It presents the following characteristics:
+	\begin{itemize}
+		\item It communicates with the logic tests it launches by use of the observable pattern. Hence there is no active polling on the test status and timer, instead the game object is notified when the test status is modified to act appropriately.
+		\item Communication of the remote game object with the game clients is performed by messages sent through ActiveMQ server. The game once started it generates a unique queue with its pid as identifier to send out messages to its players.
+		\item Each game client creates a queue to send out messages to the remote game object. The game object subscribes to these queues.
+		\item The nature,number and order of test to perform in the game are described as an Array of test classes that are executed in order. Hence adding new type of tests or adding more tests to the game structure is only a change in the description of the @tests array. 
+		\item The game loop is performed by the different events that occur as the tests occur and send out updates to the game or the game clients send messages to the game through the ActiveMQ server. Hence the game loop is completely discrete and there is no active polling on events or messages. 
+	\end{itemize}
+	The game presents the following public methods:
+	\begin{itemize}
+		\item initialize - Creates the game queue, adds the owner user to the games player list and waits for incoming messages.
+		\item game\_owner - returns the name of the game owner.
+		\item started? - returns true if the game has started.
+		\item in\_preparation? - returns true if the game has not started and players can still be added.
+		\item players\_in\_game - returns the number of players in the game.
+		\item add\_player - adds a player to the list of game players and makes the game object subscribe to the game client message queue.
+		\item player\_list - returns the list of player names.
+		\item my\_id - returns the game id for a specific player name.
+		\item start\_game - starts the game and notifies the players.
+		\item next\_test - starts the next test and sends the problem specification to the players.
+		\item set\_user\_solution - set the user solution for the current test.
+		\item update - callback method used by the test objects to notify of test completion and winner.
+		\item pause\_game - can be used a game player to pause the game before the next test.
+		\item resume\_game - can be used a game player to resume the game if it is paused.
+		\item kill\_player - can be used by the game owner to kick out a player.
+		\item end\_game - private method called by the game once the final test is performed and notifies the players.
+		\item winner - returns the current winner of the game.
+		\item classification - returns the current score classification of the game.
+	\end{itemize} 
+	\item[Game Client:] present in \textit{./lib/game\_client.rb}. The GameClient class is the wrapper object to allow communication with the remote Game Server (through the DRB library) and Game (through the ActiveMQ message queue). The GameClient has the callbacks or hooks methods that are called upon status modifications of the Game. The game client presents the following public methods:
+	\begin{itemize}
+		\item initialize - Connects the game client to the remote game server object through DRB. 
+		\item connected\_to\_server? - returns true if the game client is connected to a game server object.
+		\item retrieve\_games\_list - returns the current list of games launched from the game server.
+		\item in\_game? - returns true if the player is in a game.
+		\item leave\_game - allows the player to leave a game.
+		\item owner\_of\_game? - returns true if the player is in a game and is owner of the game.
+		\item game\_started? - returns true if the player is in a game and the game has started.
+		\item list\_users\_of\_game - lists the players of the current game.
+		\item create\_game - creates a new remote game object through the game server object through the DRB protocol and subscribes to its message queue.
+		\item update - is the main callback method used by the remote game object to communicate status changes to the game client.
+		\item game\_joined - is the callback method used to communicate the game client that it has successfully joined a game. 
+		\item start\_game - send the start game message to the remote server if invoked by the game owner.
+		\item join\_game - adds a user to an existing game and subscribes to its message queue. 
+	\end{itemize}
+	\item[Game Server:] Coded in \textit{./lib/game\_server.rb}. The GameServer class it the main server component of the game it is an object published by means of the DRB gem. The GameServer creates the remote games as stand alone processes and manages them.The game server presents the following public methods:
+	\begin{itemize}
+		\item initialize - start the game server object and publishes it through the DRB gem and also launches the ActiveMQ server so that the remote game objects and game clients communicate.
+		\item queue\_game\_port - returns the port where the ActiveMQ server is listening. 
+		\item update\_top\_scores - updates the top scores list and saves it to a file.
+		\item get\_top\_scores - returns the current top scores list.
+		\item create\_game - launches a separate process through the \textit{./bin/remote\_game.rb} command to create a remote game object.  
+		\item list\_games - returns the current list of games.
+	\end{itemize} 
+	\item[Message:] Present in \textit{./lib/messaging.rb}. The message class acts as vessel to call the methods of listening objects through the message queue. 
+	\item[Message Manager] Coded in in \textit{./lib/messaging.rb}. The MessageManager class acts as wrapper class to perform communications through the ActiveMQ server. The message manager has the following public methods:
+	\begin{itemize}
+		\item initialize - connects the object to the ActiveMQ server.
+		\item subscribe - subscribes the object to a specific message queue.
+		\item unsubscribe - unsubscribes the object from a specific message queue.
+		\item freeze\_subscriptions - joins the message queue listening thread so that the object will only be called once a message is received through one of the queues the object has subscribed to. 
+		\item publish -sends out a message object through the specific queue assigned to the object managed by the message manager.
+		\item end\_messaging - unsubscribes the object from all queues and stops listening for messages.
+	\end{itemize}
+	\item[Letters Problem Generator:] Coded in \textit{./lib/letter\_problem\_generator.rb}. The class creates either manually by user selection or through a random selection a letter problem which consists of 9 letters from the spanish alphabet. The object presents the following public methods:
+	\begin{itemize}
+		\item initialize - generates the letter problem 
+		\item complete? - returns true if 9 letters have been selected.
+		\item add\_consonant - adds a letter from the consonant group to the selected set. 
+		\item add\_vowel - adds a letter from the vowel group to the selected set. 
+		\item random\_selection - selects 9 letters at random. 
+	\end{itemize} 
+	\item[Number Problem Generator:] Located in \textit{./lib/number\_problem\_generator.rb}. The class creates a Number problem as described by the numbers test of the game by either random selection or by loading it from a file. 
+	\item[Solution:] Coded in \textit{./lib/solution.rb}. Is the base class for the solution of the different test types. It has the following public methods:
+	\begin{itemize}
+		\item initialize - generates the initial object.
+		\item is\_valid? - returns true if the solution contained is valid depending on the specific test.
+		\item exact? - returns true if the solution is exact.
+		\item distance - returns the distance from the target solution, hence when the distance is 0 the solution is exact.
+	\end{itemize}
+	\item[Numbers Solution:]  Coded in \textit{./lib/numbers\_solution.rb} is a solution class child specific for the numbers test. It validates the solution by generating the operation graph associated to the operation.
+	\item[Letters Solution:] Coded in \textit{./lib/letters\_solution.rb} is a solution class child specific for the letters test. It validates the solution against the dictionary class. 
+	\item[Test:] Present in \textit{./lib/test.rb}. It is the base class for all of the test types. The test classes extend in order to provide the NumbersTest and LettersTest classes. 
+	\item[Score:] Present in \textit{./lib/score.rb} keeps the score of a player in a game. It has the following public methods:
+	\begin{itemize}
+		\item initialize - creates a new score object setting the points to 0
+		\item add\_points - adds an specified amount to the current score
+	\end{itemize}
+
+	\item[Top Scores List:] Coded in \textit{./lib/top\_scores\_list.rb}. Maintains a top score list for a game server. Presenting the following public methods:
+	\begin{itemize}
+		\item initialize - generates the top score list object.
+		\item has\_scores? - returns true if the score list contains scores.
+		\item best\_score - returns the best score of the list.
+		\item worst\_score - returns the worst score of the list.
+		\item add\_scores - adds a set of scores to the top list score.
+		\item add\_score - adds a score to the top list score.
+		\item save - saves the top list score to a file.
+		\item self.load - loads a top score list object from a file.
+	\end{itemize}
+	
+\end{description}	
+		
+\subsection{Numbers Letters Demo Game Platform}
+
+\par The numbers letters client currently holds a basic client implementation that creates a game and starts it with one player.
+
+\subsubsection{Numbers Letters Server}
+
+\par A command that launches a stand alone game server.
+
+{\footnotesize\begin{verbatim}
+	macbosch:bin vbosch$ ./numbers_letters_server.rb -h
+	numbers_letters_server creates a game server that creates and mananges Numbers and Letters games.
+
+	Usage:
+	       numbers_letters_server [options]
+	where [options] are:
+	  --game-server-port, -g <i>:   Port where the remote game server must listen for incoming connections  (default: 9001)
+	   --game-queue-port, -a <i>:   Port where the queue server will be listening (default: 61613)
+	               --version, -v:   Print version and exit
+	                  --help, -h:   Show this message
+\end{verbatim}}
+
+\subsubsection{Remote Game Process}
+
+\par The following command launches a stand alone remote game object. This is done by the game server and hence this will not be done neither by a game player or the game server admin. 
+
+{\footnotesize\begin{verbatim}
+	MacBosch:bin vbosch$ ./remote_game.rb -h
+	remote_game creates a stand alone process for a Numbers and Letters game so that it can be consumed remotely.
+
+	Usage:
+	       remote_game [options]
+	where [options] are:
+	        --port, -p <i>:   Port where the remote game server must listen for incoming connections  (default: 9002)
+	  --user-name, -u <s+>:   User name of the game owner
+	   --wait-time, -w <i>:   Wait time for a user that pauses the game (default: 30)
+	         --version, -v:   Print version and exit
+	            --help, -h:   Show this message
+\end{verbatim}}
+
+\subsubsection{Creating a game}
+
+\par In order to create a game the following command has been developed:
+
+{\footnotesize\begin{verbatim}
+macbosch:bin vbosch$ ./create_game.rb -h
+Create game lets you create Cifras y Letras game.
+
+Usage:
+       create_game [options]
+where [options] are:
+  --game-server-host, -g <s>:   Host where the game server is held (default: localhost)
+  --game-server-port, -a <i>:   Port where the remote game server is listening for incoming connections  (default: 9001)
+       --player-name, -p <s>:   Name of the player (default: Creator)
+           --game-id, -m <i>:   Id of the game we want to join
+         --wait-time, -w <i>:   Time to wait for player that has paused the game (default: 30)
+               --version, -v:   Print version and exit
+                  --help, -h:   Show this message
+\end{verbatim}}
+
+\subsubsection{Joining a game}
+
+\par In order to join a game the following command has been developed:
+
+{\footnotesize\begin{verbatim}
+	macbosch:bin vbosch$ ./join_game.rb -h
+	Join game lets you join a created Cifras y Letras game.
+
+	Usage:
+	       join_game [options]
+	where [options] are:
+	  --game-server-host, -g <s>:   Host where the game server is held (default: localhost)
+	  --game-server-port, -a <i>:   Port where the remote game server is listening for incoming connections  (default: 9001)
+	       --player-name, -p <s>:   Name of the player (default: Anonymous)
+	           --game-id, -m <i>:   Id of the game we want to join
+	               --version, -v:   Print version and exit
+	                  --help, -h:   Show this message
+\end{verbatim}}
+
+\subsubsection{Running the base example}
+
+\par Next we will indicate the steps in order to launch the base game software on your local machine. The developed commands are preconfigured so that they will run with out problems when they are executed on the same machine.
+
+\par Note that:
+\begin{itemize}
+	\item If the server is executed in a different machine than the client ( as it would happen in a real life scenario) the game-server-host (-g) option must be indicated when executing the create\_game and join\_game commands. 
+	\item If we choose to change the base port where the game server listens (game-server-port parameter) we will also have to specify the change when launching the create\_game and join\_game commands.
+	\item Apache Active MQ default port for the stomp protocol is 61613. We have configured this in the Active MQ file in the installation section hence if we want to change the queue port used by the game numbers\_letters\_server we must first modify that configuration file. 
+\end{itemize} 
+
+\par In order to run the base demo of the Cifras y Letras game on the same machine you must perform the following steps:
+\begin{enumerate}
+	\item Launch the game server. In order to do this open a command window (server window) and type ./numbers\_letters\_server.rb you will get the following result:
+	\par \begin{figure}[H]
+		\centerline{%
+		\includegraphics[scale=0.5]{./1.png}
+		}
+		\caption[Numbers letters initial execution]{Picture shows the initial output when executing the server.}
+	\end{figure}
+	
+	\item Create a game. Next we open a second command window (creator window) and execute ./create\_game.rb. This makes a connection by a user named Creator (default name as none is specified in the command window) to the server and creates a game. We can see the following output on the creator window: 
+	\par \begin{figure}[H]
+		\centerline{%
+		\includegraphics[scale=0.5]{./2.png}
+		}
+		\caption[Create game initial execution]{Picture shows the initial output when executing game creation command.}
+	\end{figure}
+	
+	\par As we can see in the example the game has been created listening on the queue name 2781.
+	
+	\item Join the game. Next we join the game by opening a new command window (joiner window) and executing ./join\_game.rb -m 2781 and get the following result:
+	\par \begin{figure}[H]
+		\centerline{%
+		\includegraphics[scale=0.5]{./3.png}
+		}
+		\caption[Join game initial execution]{Picture shows the initial output when executing game join command.}
+	\end{figure}
+	\par If we look at this point the server window we can see the following:
+	\par \begin{figure}[H]
+		\centerline{%
+		\includegraphics[scale=0.5]{./4.png}
+		}
+		\caption[Game joined by players]{Picture shows log output when game is created and connected by additional players.}
+	\end{figure}
+	\par As we can see in the screen shot we can see the log messages for the game creation and also for the two players joining the game (Creator and Anonymous).
+	
+	\item Start the game. Once a player has joined the game we can start it by pressing enter on the creator window. We will start to see the description of the first test on the screen of both creator and joiner windows the following:
+	\par \begin{figure}[H]
+		\centerline{%
+		\includegraphics[scale=0.5]{./5.png}
+		}
+		\caption[Game starts]{Picture shows the initial description of the first numbers test being printed out after game is started.}
+	\end{figure}
+
+	
+\end{enumerate}
+
+\section{Conclusions}
+
+\par We have performed an implementation of the Cifras y Letras game with the following characteristics:
+\begin{itemize}
+	\item Is easily extendable to add other logic tests.
+	\item Allows for multiple players to play over the network.
+	\item The game loop is based on the publisher-subscriber implementation pattern hence we are performing discrete simulation. 
+\end{itemize}
+
+\par For future versions the game could be extended to include:
+\begin{itemize}
+	\item Other logical tests.
+	\item Implement a graphical user interface:
+	\begin{itemize}
+		\item If you decide to keep ruby executing on the standard machine (developed in C) you can implement this with: GTK, QT, tk, FxRuby,... by searching the internet you will find that there are many bindings to popular GUI toolkits for standard ruby.
+		\item If we execute ruby on the java virtual machine (jruby, recommended for windows) you can use swing, JMonkey Engine or any other GUI toolkit that is usable from java. 
+	\end{itemize}
+	\item Add functionality to the game class so that the tests to perform (currently held in a vector in the initialize method) and other configuration can be read from a file.
+	\item Active MQ - Stomp protocol does not allow for broadcast messages in order to broadcast messages to all game players of a game we have had to implement a message envelope with address solution. Substituting Active MQ for RabbitMQ or another message queue that supports the AMQP protocol would resolve this.
+	\item Current timing is performed by forking a process with a sleep system call. Although it is effective it is a bit rudimentary and might not be portable. This could be improved by using the Event Machine library so that we can have pure ruby timed events and repeating events.
+	 
+\end{itemize}
+
+\end{document}
